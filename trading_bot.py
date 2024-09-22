@@ -43,24 +43,74 @@ exchange = ccxt.binance()
 
 class TradingBot:
     def __init__(self):
+        # Initialize variables
+        self.running = False
         self.wallet = load_wallet()
         self.timeframe = '1h'
         self.limit = 500
-        self.current_positions = {}  # {'TOKEN_SYMBOL': {'amount': amount, 'purchase_price': price}}
-        self.stop_loss_pct = 0.95  # 5% loss
-        self.take_profit_pct = 1.05  # 5% profit
+        self.current_positions = {}
+        self.stop_loss_pct = 0.95
+        self.take_profit_pct = 1.05
         self.top_n_tokens = 5
-        self.token_selection_interval = 3600  # 1 hour
+        self.token_selection_interval = 3600
         self.discord_alert = DiscordAlert()
         self.discord_alert.run_bot()
         self.token_mints = get_token_mints()
         self.pools = get_raydium_pools()
-    
+        self.loop = asyncio.get_event_loop()
+        self.task = None
+
+    async def start(self):
+        if not self.running:
+            self.running = True
+            self.task = self.loop.create_task(self.run())
+            logging.info("Trading bot started.")
+
+    async def stop(self):
+        if self.running:
+            self.running = False
+            if self.task:
+                self.task.cancel()
+            logging.info("Trading bot stopped.")
+
+    async def run(self):
+        while self.running:
+            try:
+                top_tokens = await self.select_top_tokens()
+                for symbol in top_tokens:
+                    token_symbol = symbol.split('/')[0]
+                    reasoning, decision = await self.advanced_reasoning_decision(token_symbol)
+                    logging.info(f"Token: {token_symbol}, Decision: {decision.upper()}, Reasoning: {reasoning}")
+
+                    if decision == 'buy' and token_symbol not in self.current_positions:
+                        await self.make_trade(symbol, 'buy')
+                    elif decision == 'sell' and token_symbol in self.current_positions:
+                        await self.make_trade(symbol, 'sell')
+                    else:
+                        logging.info(f"No trade action for {token_symbol}")
+
+                # Wait before next cycle
+                await asyncio.sleep(self.token_selection_interval)
+            except asyncio.CancelledError:
+                logging.info("Trading bot task cancelled.")
+                break
+            except Exception as e:
+                logging.error(f"Error in bot run loop: {e}")
+                send_email(
+                    subject="Trading Bot Alert: Error",
+                    body=f"An error occurred: {e}"
+                )
+                await asyncio.sleep(60)
+
     async def fetch_data(self, symbol):
-        ohlcv = exchange.fetch_ohlcv(symbol, timeframe=self.timeframe, limit=self.limit)
-        df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        df['datetime'] = pd.to_datetime(df['timestamp'], unit='ms')
-        return df
+        try:
+            ohlcv = exchange.fetch_ohlcv(symbol, timeframe=self.timeframe, limit=self.limit)
+            df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+            df['datetime'] = pd.to_datetime(df['timestamp'], unit='ms')
+            return df
+        except Exception as e:
+            logging.error(f"Error fetching data for {symbol}: {e}")
+            return pd.DataFrame()
 
     async def select_top_tokens(self):
         markets = exchange.load_markets()
@@ -85,20 +135,6 @@ class TradingBot:
         top_tokens = sorted_tokens[:self.top_n_tokens]
         logging.info(f"Selected top tokens: {top_tokens}")
         return top_tokens
-
-    async def get_technical_data(self, symbol):
-        df = await self.fetch_data(symbol)
-        df = add_indicators(df)
-        latest_data = df.iloc[-1]
-        technical_summary = {
-            'Price': latest_data['close'],
-            'RSI': latest_data['rsi14'],
-            'MACD': latest_data['macd'],
-            'Volume': latest_data['volume'],
-            'MA50': latest_data['ma50'],
-            'MA200': latest_data['ma200']
-        }
-        return technical_summary
 
     async def advanced_reasoning_decision(self, token_symbol):
         technical_data = await self.get_technical_data(f"{token_symbol}/USDT")
@@ -143,12 +179,26 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
             logging.error(f"Error with OpenAI API: {e}")
             return "", "hold"
 
+    async def get_technical_data(self, symbol):
+        df = await self.fetch_data(symbol)
+        df = add_indicators(df)
+        latest_data = df.iloc[-1]
+        technical_summary = {
+            'Price': latest_data['close'],
+            'RSI': latest_data['rsi14'],
+            'MACD': latest_data['macd'],
+            'Volume': latest_data['volume'],
+            'MA50': latest_data['ma50'],
+            'MA200': latest_data['ma200']
+        }
+        return technical_summary
+
     async def perform_swap(self, from_token_symbol, to_token_symbol, amount_in):
         """
         Performs a token swap on Raydium.
         """
         # Raydium program IDs and accounts
-        RAYDIUM_SWAP_PROGRAM_ID = PublicKey('rvkYEt3Qp6eC3Ndy6EMrxJD9F6xZjQ9S8dHEs7hY3vv')  # Example Raydium Swap Program ID
+        RAYDIUM_SWAP_PROGRAM_ID = PublicKey('rvkYEt3Qp6eC3Ndy6EMrxJD9F6xZjQ9S8dHEs7hY3vv')  # Raydium Swap Program ID
 
         # Token mints
         from_token_mint_address = self.token_mints.get(from_token_symbol)
@@ -288,32 +338,5 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
                 await self.discord_alert.send_message(f"Sold {token_symbol}")
                 del self.current_positions[token_symbol]
 
-    async def run(self):
-        while True:
-            try:
-                top_tokens = await self.select_top_tokens()
-                for symbol in top_tokens:
-                    token_symbol = symbol.split('/')[0]
-                    reasoning, decision = await self.advanced_reasoning_decision(token_symbol)
-                    logging.info(f"Token: {token_symbol}, Decision: {decision.upper()}, Reasoning: {reasoning}")
-
-                    if decision == 'buy' and token_symbol not in self.current_positions:
-                        await self.make_trade(symbol, 'buy')
-                    elif decision == 'sell' and token_symbol in self.current_positions:
-                        await self.make_trade(symbol, 'sell')
-                    else:
-                        logging.info(f"No trade action for {token_symbol}")
-
-                # Wait before next cycle
-                await asyncio.sleep(self.token_selection_interval)
-            except Exception as e:
-                logging.error(f"Error in bot run loop: {e}")
-                send_email(
-                    subject="Trading Bot Alert: Error",
-                    body=f"An error occurred: {e}"
-                )
-                await asyncio.sleep(60)
-
-if __name__ == "__main__":
-    bot = TradingBot()
-    asyncio.run(bot.run())
+# Instantiate the bot
+bot = TradingBot()
