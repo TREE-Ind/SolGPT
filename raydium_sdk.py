@@ -1,7 +1,6 @@
 # raydium_sdk.py
 
 import requests
-from solana.publickey import PublicKey
 import logging
 
 def get_raydium_pools():
