@@ -14,13 +14,14 @@ from solana_connection import load_wallet, get_balance
 from data_functions import fetch_news_for_token, analyze_sentiment
 from raydium_sdk import get_raydium_pools, find_pool_by_tokens, get_token_mints
 from solana.rpc.async_api import AsyncClient
-from solana.keypair import Keypair
+from solders.pubkey import Pubkey
+from solders.keypair import Keypair
 from solana.transaction import Transaction, TransactionInstruction
-from solana.publickey import PublicKey
 from solana.rpc.types import TxOpts
-from spl.token.instructions import get_associated_token_address
 from solana.system_program import SYS_PROGRAM_ID
 from spl.token.constants import TOKEN_PROGRAM_ID
+from spl.token.async_client import AsyncToken
+from spl.token.instructions import get_associated_token_address
 import struct
 
 # Configure logging
@@ -120,6 +121,8 @@ class TradingBot:
         for token in tokens:
             try:
                 df = await self.fetch_data(token)
+                if df.empty:
+                    continue
                 df = add_indicators(df)
                 df.dropna(inplace=True)
                 latest_close = df['close'].iloc[-1]
@@ -155,7 +158,7 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
         # Get response from LLM
         try:
             response = openai.Completion.create(
-                engine='gpt-4o-mini',
+                engine='text-davinci-003',
                 prompt=prompt,
                 max_tokens=500,
                 temperature=0.7,
@@ -181,6 +184,8 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
 
     async def get_technical_data(self, symbol):
         df = await self.fetch_data(symbol)
+        if df.empty:
+            return {}
         df = add_indicators(df)
         latest_data = df.iloc[-1]
         technical_summary = {
@@ -198,7 +203,7 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
         Performs a token swap on Raydium.
         """
         # Raydium program IDs and accounts
-        RAYDIUM_SWAP_PROGRAM_ID = PublicKey('rvkYEt3Qp6eC3Ndy6EMrxJD9F6xZjQ9S8dHEs7hY3vv')  # Raydium Swap Program ID
+        RAYDIUM_SWAP_PROGRAM_ID = Pubkey.from_string('rvkYEt3Qp6eC3Ndy6EMrxJD9F6xZjQ9S8dHEs7hY3vv')  # Raydium Swap Program ID
 
         # Token mints
         from_token_mint_address = self.token_mints.get(from_token_symbol)
@@ -208,15 +213,15 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
             logging.error(f"Token mint addresses not found for {from_token_symbol} or {to_token_symbol}")
             return
 
-        from_token_mint = PublicKey(from_token_mint_address)
-        to_token_mint = PublicKey(to_token_mint_address)
+        from_token_mint = Pubkey.from_string(from_token_mint_address)
+        to_token_mint = Pubkey.from_string(to_token_mint_address)
 
         # Get associated token accounts
         from_token_account = await get_associated_token_address(self.wallet.public_key, from_token_mint)
         to_token_account = await get_associated_token_address(self.wallet.public_key, to_token_mint)
 
         # Get pool information for the token pair
-        pool_info = find_pool_by_tokens(self.pools, str(from_token_mint), str(to_token_mint))
+        pool_info = find_pool_by_tokens(self.pools, from_token_mint_address, to_token_mint_address)
         if not pool_info:
             logging.error(f"No pool found for {from_token_symbol}/{to_token_symbol}")
             return
@@ -238,10 +243,10 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
             response = await solana_client.send_transaction(
                 transaction, self.wallet, opts=TxOpts(preflight_commitment="confirmed")
             )
-            logging.info(f"Swap transaction sent: {response['result']}")
+            logging.info(f"Swap transaction sent: {response}")
             send_email(
                 subject="Trading Bot Alert: Swap Executed",
-                body=f"Swapped {amount_in} units of {from_token_symbol} to {to_token_symbol}. Transaction ID: {response['result']}"
+                body=f"Swapped {amount_in} units of {from_token_symbol} to {to_token_symbol}. Transaction ID: {response}"
             )
             await self.discord_alert.send_message(f"Swapped {amount_in} units of {from_token_symbol} to {to_token_symbol}.")
         except Exception as e:
@@ -270,22 +275,22 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
             {"pubkey": user_authority, "is_signer": True, "is_writable": False},
 
             # Pool accounts
-            {"pubkey": PublicKey(pool_info['ammId']), "is_signer": False, "is_writable": True},
-            {"pubkey": PublicKey(pool_info['ammAuthority']), "is_signer": False, "is_writable": False},
-            {"pubkey": PublicKey(pool_info['ammOpenOrders']), "is_signer": False, "is_writable": True},
-            {"pubkey": PublicKey(pool_info['ammTargetOrders']), "is_signer": False, "is_writable": True},
-            {"pubkey": PublicKey(pool_info['poolCoinTokenAccount']), "is_signer": False, "is_writable": True},
-            {"pubkey": PublicKey(pool_info['poolPcTokenAccount']), "is_signer": False, "is_writable": True},
+            {"pubkey": Pubkey.from_string(pool_info['ammId']), "is_signer": False, "is_writable": True},
+            {"pubkey": Pubkey.from_string(pool_info['ammAuthority']), "is_signer": False, "is_writable": False},
+            {"pubkey": Pubkey.from_string(pool_info['ammOpenOrders']), "is_signer": False, "is_writable": True},
+            {"pubkey": Pubkey.from_string(pool_info['ammTargetOrders']), "is_signer": False, "is_writable": True},
+            {"pubkey": Pubkey.from_string(pool_info['poolCoinTokenAccount']), "is_signer": False, "is_writable": True},
+            {"pubkey": Pubkey.from_string(pool_info['poolPcTokenAccount']), "is_signer": False, "is_writable": True},
 
             # Serum market accounts
-            {"pubkey": PublicKey(pool_info['serumProgramId']), "is_signer": False, "is_writable": False},
-            {"pubkey": PublicKey(pool_info['serumMarket']), "is_signer": False, "is_writable": True},
-            {"pubkey": PublicKey(pool_info['serumBids']), "is_signer": False, "is_writable": True},
-            {"pubkey": PublicKey(pool_info['serumAsks']), "is_signer": False, "is_writable": True},
-            {"pubkey": PublicKey(pool_info['serumEventQueue']), "is_signer": False, "is_writable": True},
-            {"pubkey": PublicKey(pool_info['serumCoinVaultAccount']), "is_signer": False, "is_writable": True},
-            {"pubkey": PublicKey(pool_info['serumPcVaultAccount']), "is_signer": False, "is_writable": True},
-            {"pubkey": PublicKey(pool_info['serumVaultSigner']), "is_signer": False, "is_writable": False},
+            {"pubkey": Pubkey.from_string(pool_info['serumProgramId']), "is_signer": False, "is_writable": False},
+            {"pubkey": Pubkey.from_string(pool_info['serumMarket']), "is_signer": False, "is_writable": True},
+            {"pubkey": Pubkey.from_string(pool_info['serumBids']), "is_signer": False, "is_writable": True},
+            {"pubkey": Pubkey.from_string(pool_info['serumAsks']), "is_signer": False, "is_writable": True},
+            {"pubkey": Pubkey.from_string(pool_info['serumEventQueue']), "is_signer": False, "is_writable": True},
+            {"pubkey": Pubkey.from_string(pool_info['serumCoinVaultAccount']), "is_signer": False, "is_writable": True},
+            {"pubkey": Pubkey.from_string(pool_info['serumPcVaultAccount']), "is_signer": False, "is_writable": True},
+            {"pubkey": Pubkey.from_string(pool_info['serumVaultSigner']), "is_signer": False, "is_writable": False},
 
             # Programs
             {"pubkey": TOKEN_PROGRAM_ID, "is_signer": False, "is_writable": False},
@@ -293,7 +298,7 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
         ]
 
         swap_instruction = TransactionInstruction(
-            program_id=PublicKey(pool_info['programId']),
+            program_id=Pubkey.from_string(pool_info['programId']),
             keys=keys,
             data=instruction_data
         )
@@ -308,8 +313,6 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
 
         # Convert amount to smallest units
         decimals = 6  # Default to 6 decimals
-        # Assuming token_info contains decimals; replace with actual method to get decimals
-        # For this example, we default to 6 decimals
         amount_in = int(amount * (10 ** decimals))
 
         logging.info(f"Initiating trade: {decision.upper()} {from_token} to {to_token}, Amount: {amount_in}")
@@ -317,6 +320,9 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
 
         if decision == 'buy':
             data = await self.fetch_data(symbol)
+            if data.empty:
+                logging.error(f"Failed to fetch data for {symbol}")
+                return
             latest_close = data['close'].iloc[-1]
             self.current_positions[token_symbol] = {
                 'amount': amount,
