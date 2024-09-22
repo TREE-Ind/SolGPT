@@ -1,0 +1,15 @@
+solana
+pandas
+numpy
+scikit-learn
+ccxt
+requests
+python-dotenv
+asyncio
+ta
+discord.py
+websockets
+openai
+tweepy
+spl-token
+textblob
