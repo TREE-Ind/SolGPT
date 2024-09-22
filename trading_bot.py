@@ -155,7 +155,7 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
         # Get response from LLM
         try:
             response = openai.Completion.create(
-                engine='text-davinci-003',
+                engine='gpt-4o-mini',
                 prompt=prompt,
                 max_tokens=500,
                 temperature=0.7,
