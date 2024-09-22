@@ -30,3 +30,77 @@ This repository contains a fully functional Solana AI Trading Bot that integrate
 
 ## Project Structure
 
+
+---
+
+## Features
+
+- **Chain-of-Thought Reasoning**: Uses OpenAI's GPT models to analyze market data and generate trading decisions with reasoning.
+- **Raydium DEX Integration**: Executes trades on the Raydium DEX using Solana smart contracts.
+- **Automatic Pool and Token Mint Retrieval**: Automatically fetches all necessary pool information and token mint addresses from Raydium's API.
+- **Technical Analysis**: Incorporates multiple technical indicators.
+- **Sentiment Analysis**: Analyzes social media sentiment using Twitter data.
+- **News Analysis**: Fetches and considers recent news articles related to tokens.
+- **Risk Management**: Implements stop-loss and take-profit strategies.
+- **Alerts**: Sends notifications via email and Discord.
+- **Logging**: Logs all activities for monitoring and debugging.
+
+---
+
+## Prerequisites
+
+- **Python 3.8 or higher**
+- **Solana CLI** and a **Solana Wallet** (e.g., [Solflare](https://solflare.com/))
+- **API Keys**:
+  - **OpenAI API Key**
+  - **News API Key** (e.g., [NewsAPI.org](https://newsapi.org/))
+  - **Twitter API Keys**
+  - **Discord Bot Token**
+- **Basic Understanding** of Solana, Python, and cryptocurrency trading.
+
+---
+
+## Installation
+
+1. **Clone the Repository**
+
+   ```bash
+   git clone https://github.com/yourusername/solana_ai_trading_bot.git
+   cd solana_ai_trading_bot
+
+## Install dependencies
+
+```pip install -r requirements.txt```
+
+## Create ENV file
+
+```# .env
+
+# Solana Wallet (Base64 encoded private key)
+SOLANA_PRIVATE_KEY="your_base64_encoded_private_key"
+
+# Email Alerts
+ALERT_EMAIL="your_email@example.com"
+ALERT_EMAIL_PASSWORD="your_email_password"
+RECIPIENT_EMAIL="recipient_email@example.com"
+
+# Discord Alerts
+DISCORD_TOKEN="your_discord_bot_token"
+DISCORD_CHANNEL_ID=123456789012345678  # Replace with your Discord channel ID
+
+# OpenAI API Key
+OPENAI_API_KEY="your_openai_api_key"
+
+# News API Key (e.g., NewsAPI.org)
+NEWS_API_KEY="your_news_api_key"
+
+# Twitter API Keys for Sentiment Analysis
+TWITTER_API_KEY="your_twitter_api_key"
+TWITTER_API_SECRET_KEY="your_twitter_api_secret_key"
+TWITTER_ACCESS_TOKEN="your_twitter_access_token"
+TWITTER_ACCESS_TOKEN_SECRET="your_twitter_access_token_secret"
+```
+
+## Usage
+
+```python trading_bot.py```
