@@ -1,7 +1,7 @@
 # solana_connection.py
 
 from solana.rpc.async_api import AsyncClient
-from solana.keypair import Keypair
+from solders.keypair import Keypair
 from dotenv import load_dotenv
 import os
 import base64
@@ -14,7 +14,7 @@ def load_wallet():
         raise ValueError("SOLANA_PRIVATE_KEY not set in .env")
 
     private_key_bytes = base64.b64decode(private_key_str)
-    keypair = Keypair.from_secret_key(private_key_bytes)
+    keypair = Keypair.from_bytes(private_key_bytes)
     return keypair
 
 async def get_balance(client, public_key):
