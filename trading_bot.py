@@ -9,7 +9,7 @@ import openai
 from dotenv import load_dotenv
 from utils import add_indicators
 from alert import send_email
-from alert_discord import DiscordAlert
+##from alert_discord import DiscordAlert
 from solana_connection import load_wallet, get_balance
 from data_functions import fetch_news_for_token, analyze_sentiment
 from raydium_sdk import get_raydium_pools, find_pool_by_tokens, get_token_mints
@@ -55,8 +55,8 @@ class TradingBot:
         self.take_profit_pct = 1.05
         self.top_n_tokens = 5
         self.token_selection_interval = 3600
-        self.discord_alert = DiscordAlert()
-        self.discord_alert.run_bot()
+        #self.discord_alert = DiscordAlert()
+        #self.discord_alert.run_bot()
         self.token_mints = get_token_mints()
         self.pools = get_raydium_pools()
         self.loop = asyncio.get_event_loop()
