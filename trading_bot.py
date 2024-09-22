@@ -16,9 +16,10 @@ from raydium_sdk import get_raydium_pools, find_pool_by_tokens, get_token_mints
 from solana.rpc.async_api import AsyncClient
 from solders.pubkey import Pubkey
 from solders.keypair import Keypair
-from solana.transaction import Transaction, TransactionInstruction
+from solana.transaction import Transaction
+from solders.instruction import Instruction, AccountMeta
 from solana.rpc.types import TxOpts
-from solana.system_program import SYS_PROGRAM_ID
+from solders.system_program import ID as SYS_PROGRAM_ID
 from spl.token.constants import TOKEN_PROGRAM_ID
 from spl.token.async_client import AsyncToken
 from spl.token.instructions import get_associated_token_address
@@ -158,9 +159,9 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
         # Get response from LLM
         try:
             response = openai.Completion.create(
-                engine='text-davinci-003',
+                engine='gpt-4o-mini',
                 prompt=prompt,
-                max_tokens=500,
+                max_tokens=2048,
                 temperature=0.7,
                 n=1,
                 stop=None,
@@ -176,6 +177,8 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
                 decision = 'sell'
             elif 'HOLD' in reasoning.upper():
                 decision = 'hold'
+            else:
+                decision = 'hold'  # Default to hold if no clear decision
 
             return reasoning, decision
         except Exception as e:
@@ -217,8 +220,8 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
         to_token_mint = Pubkey.from_string(to_token_mint_address)
 
         # Get associated token accounts
-        from_token_account = await get_associated_token_address(self.wallet.public_key, from_token_mint)
-        to_token_account = await get_associated_token_address(self.wallet.public_key, to_token_mint)
+        from_token_account = await get_associated_token_address(self.wallet.pubkey(), from_token_mint)
+        to_token_account = await get_associated_token_address(self.wallet.pubkey(), to_token_mint)
 
         # Get pool information for the token pair
         pool_info = find_pool_by_tokens(self.pools, from_token_mint_address, to_token_mint_address)
@@ -232,7 +235,7 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
         swap_instruction = self.create_swap_instruction(
             user_source_token_account=from_token_account,
             user_destination_token_account=to_token_account,
-            user_authority=self.wallet.public_key,
+            user_authority=self.wallet.pubkey(),
             pool_info=pool_info,
             amount_in=amount_in
         )
@@ -270,36 +273,36 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
 
         keys = [
             # User accounts
-            {"pubkey": user_source_token_account, "is_signer": False, "is_writable": True},
-            {"pubkey": user_destination_token_account, "is_signer": False, "is_writable": True},
-            {"pubkey": user_authority, "is_signer": True, "is_writable": False},
+            AccountMeta(pubkey=user_source_token_account, is_signer=False, is_writable=True),
+            AccountMeta(pubkey=user_destination_token_account, is_signer=False, is_writable=True),
+            AccountMeta(pubkey=user_authority, is_signer=True, is_writable=False),
 
             # Pool accounts
-            {"pubkey": Pubkey.from_string(pool_info['ammId']), "is_signer": False, "is_writable": True},
-            {"pubkey": Pubkey.from_string(pool_info['ammAuthority']), "is_signer": False, "is_writable": False},
-            {"pubkey": Pubkey.from_string(pool_info['ammOpenOrders']), "is_signer": False, "is_writable": True},
-            {"pubkey": Pubkey.from_string(pool_info['ammTargetOrders']), "is_signer": False, "is_writable": True},
-            {"pubkey": Pubkey.from_string(pool_info['poolCoinTokenAccount']), "is_signer": False, "is_writable": True},
-            {"pubkey": Pubkey.from_string(pool_info['poolPcTokenAccount']), "is_signer": False, "is_writable": True},
+            AccountMeta(pubkey=Pubkey.from_string(pool_info['ammId']), is_signer=False, is_writable=True),
+            AccountMeta(pubkey=Pubkey.from_string(pool_info['ammAuthority']), is_signer=False, is_writable=False),
+            AccountMeta(pubkey=Pubkey.from_string(pool_info['ammOpenOrders']), is_signer=False, is_writable=True),
+            AccountMeta(pubkey=Pubkey.from_string(pool_info['ammTargetOrders']), is_signer=False, is_writable=True),
+            AccountMeta(pubkey=Pubkey.from_string(pool_info['poolCoinTokenAccount']), is_signer=False, is_writable=True),
+            AccountMeta(pubkey=Pubkey.from_string(pool_info['poolPcTokenAccount']), is_signer=False, is_writable=True),
 
             # Serum market accounts
-            {"pubkey": Pubkey.from_string(pool_info['serumProgramId']), "is_signer": False, "is_writable": False},
-            {"pubkey": Pubkey.from_string(pool_info['serumMarket']), "is_signer": False, "is_writable": True},
-            {"pubkey": Pubkey.from_string(pool_info['serumBids']), "is_signer": False, "is_writable": True},
-            {"pubkey": Pubkey.from_string(pool_info['serumAsks']), "is_signer": False, "is_writable": True},
-            {"pubkey": Pubkey.from_string(pool_info['serumEventQueue']), "is_signer": False, "is_writable": True},
-            {"pubkey": Pubkey.from_string(pool_info['serumCoinVaultAccount']), "is_signer": False, "is_writable": True},
-            {"pubkey": Pubkey.from_string(pool_info['serumPcVaultAccount']), "is_signer": False, "is_writable": True},
-            {"pubkey": Pubkey.from_string(pool_info['serumVaultSigner']), "is_signer": False, "is_writable": False},
+            AccountMeta(pubkey=Pubkey.from_string(pool_info['serumProgramId']), is_signer=False, is_writable=False),
+            AccountMeta(pubkey=Pubkey.from_string(pool_info['serumMarket']), is_signer=False, is_writable=True),
+            AccountMeta(pubkey=Pubkey.from_string(pool_info['serumBids']), is_signer=False, is_writable=True),
+            AccountMeta(pubkey=Pubkey.from_string(pool_info['serumAsks']), is_signer=False, is_writable=True),
+            AccountMeta(pubkey=Pubkey.from_string(pool_info['serumEventQueue']), is_signer=False, is_writable=True),
+            AccountMeta(pubkey=Pubkey.from_string(pool_info['serumCoinVaultAccount']), is_signer=False, is_writable=True),
+            AccountMeta(pubkey=Pubkey.from_string(pool_info['serumPcVaultAccount']), is_signer=False, is_writable=True),
+            AccountMeta(pubkey=Pubkey.from_string(pool_info['serumVaultSigner']), is_signer=False, is_writable=False),
 
             # Programs
-            {"pubkey": TOKEN_PROGRAM_ID, "is_signer": False, "is_writable": False},
-            {"pubkey": SYS_PROGRAM_ID, "is_signer": False, "is_writable": False},
+            AccountMeta(pubkey=TOKEN_PROGRAM_ID, is_signer=False, is_writable=False),
+            AccountMeta(pubkey=SYS_PROGRAM_ID, is_signer=False, is_writable=False),
         ]
 
-        swap_instruction = TransactionInstruction(
+        swap_instruction = Instruction(
             program_id=Pubkey.from_string(pool_info['programId']),
-            keys=keys,
+            accounts=keys,
             data=instruction_data
         )
 
