@@ -4,15 +4,14 @@ import gradio as gr
 from trading_bot import bot
 import asyncio
 import threading
+import os
 
 def start_bot():
-    loop = asyncio.get_event_loop()
-    loop.create_task(bot.start())
+    asyncio.run(bot.start())
     return "Bot started."
 
 def stop_bot():
-    loop = asyncio.get_event_loop()
-    loop.create_task(bot.stop())
+    asyncio.run(bot.stop())
     return "Bot stopped."
 
 def get_bot_status():
