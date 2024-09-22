@@ -13,3 +13,4 @@ openai
 tweepy
 spl-token
 textblob
+gradio
