@@ -24,3 +24,8 @@ def load_wallet():
             return keypair
         except Exception as e:
             raise ValueError(f"Failed to decode private key: {e}")
+
+async def get_balance(client, public_key):
+    balance_response = await client.get_balance(public_key)
+    balance = balance_response['result']['value'] / 1e9  # Convert lamports to SOL
+    return balance
