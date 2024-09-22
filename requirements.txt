@@ -11,6 +11,5 @@ discord.py
 websockets
 openai
 tweepy
-spl-token
 textblob
 gradio
