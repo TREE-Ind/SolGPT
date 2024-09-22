@@ -110,15 +110,22 @@ GRADIO_PORT=7860
 
 ```python trading_bot.py```
 
-    Monitor Logs
-        The bot logs its activities in trading_bot.log.
-        Monitor this file to track the bot's performance and debug if necessary.
+### Access the Gradio UI
 
-    Receive Alerts
-        Ensure your email and Discord configurations are correct to receive alerts.
-        The bot will send notifications for significant events.
+    Open your web browser and navigate to http://localhost:7860 (or the host and port specified in your .env file).
+    Use the UI to start, stop, and monitor the bot.
 
-Important Notes
+### Monitor Logs
+
+    The bot logs its activities in trading_bot.log.
+    Monitor this file to track the bot's performance and debug if necessary.
+
+### Receive Alerts
+
+    Ensure your email and Discord configurations are correct to receive alerts.
+    The bot will send notifications for significant events.
+
+## Important Notes
 
     Automatic Retrieval of Pool and Token Mint Addresses: The bot uses raydium_sdk.py to automatically fetch all necessary pool information and token mint addresses from Raydium's API. Users do not need to input any pool addresses or mint addresses manually.
 
