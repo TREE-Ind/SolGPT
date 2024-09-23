@@ -195,3 +195,4 @@ if __name__ == "__main__":
     # Remove the conflicting asyncio loop
     # Keep the main thread alive by letting Gradio handle the event loop
     # No need for asyncio.get_event_loop().run_forever()
+
