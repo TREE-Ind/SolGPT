@@ -1,33 +1,41 @@
 # alert_discord.py
 
 import discord
-from discord.ext import commands
-from dotenv import load_dotenv
 import os
-import logging
+import asyncio
+from dotenv import load_dotenv
 
 load_dotenv()
-
-DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-DISCORD_CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID"))
 
 class DiscordAlert:
     def __init__(self):
         intents = discord.Intents.default()
-        self.client = commands.Bot(command_prefix='!', intents=intents)
-        self.channel_id = DISCORD_CHANNEL_ID
+        self.client = discord.Client(intents=intents)
+        self.channel_id = int(os.getenv("DISCORD_CHANNEL_ID"))
+        self.ready_event = asyncio.Event()
 
         @self.client.event
         async def on_ready():
-            logging.info(f'Discord bot connected as {self.client.user}')
+            print(f'Logged in as {self.client.user}')
+            self.ready_event.set()
+
+    async def start(self):
+        DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+        if not DISCORD_TOKEN:
+            raise ValueError("DISCORD_TOKEN not set in .env")
+        await self.client.start(DISCORD_TOKEN)
 
     async def send_message(self, message):
+        await self.ready_event.wait()  # Ensure the client is ready
         channel = self.client.get_channel(self.channel_id)
         if channel:
             await channel.send(message)
-            logging.info(f"Discord message sent: {message}")
         else:
-            logging.error("Discord channel not found.")
+            print("Channel not found.")
 
-    def run_bot(self):
-        self.client.loop.create_task(self.client.start(DISCORD_TOKEN))
+    async def run_bot(self):
+        try:
+            await self.start()
+        except asyncio.CancelledError:
+            await self.client.close()
+            print("Discord client closed.")
