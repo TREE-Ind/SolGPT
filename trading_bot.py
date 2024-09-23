@@ -9,7 +9,7 @@ import openai
 from dotenv import load_dotenv
 from utils import add_indicators
 from alert import send_email
-##from alert_discord import DiscordAlert
+from alert_discord import DiscordAlert
 from solana_connection import load_wallet, get_balance
 from data_functions import fetch_news_for_token, analyze_sentiment
 from raydium_sdk import get_raydium_pools, find_pool_by_tokens, get_token_mints
@@ -24,6 +24,7 @@ from spl.token.constants import TOKEN_PROGRAM_ID
 from spl.token.async_client import AsyncToken
 from spl.token.instructions import get_associated_token_address
 import struct
+import time
 
 # Configure logging
 logging.basicConfig(
@@ -55,12 +56,16 @@ class TradingBot:
         self.take_profit_pct = 1.05
         self.top_n_tokens = 5
         self.token_selection_interval = 3600
-        #self.discord_alert = DiscordAlert()
-        #self.discord_alert.run_bot()
+        self.discord_alert = DiscordAlert()
+        self.discord_alert.run_bot()
         self.token_mints = get_token_mints()
         self.pools = get_raydium_pools()
         self.loop = asyncio.get_event_loop()
         self.task = None
+        self.recent_trades = []  # List to store recent trades
+        self.performance_metrics = {'total_profit': 0, 'trades': 0, 'wins': 0, 'losses': 0}
+        self.balance_check_interval = 300  # Check balance every 5 minutes
+        self.last_balance_check = 0
 
     async def start(self):
         if not self.running:
@@ -78,6 +83,12 @@ class TradingBot:
     async def run(self):
         while self.running:
             try:
+                # Check balance
+                current_time = time.time()
+                if current_time - self.last_balance_check > self.balance_check_interval:
+                    await self.check_balance()
+                    self.last_balance_check = current_time
+
                 top_tokens = await self.select_top_tokens()
                 for symbol in top_tokens:
                     token_symbol = symbol.split('/')[0]
@@ -103,6 +114,19 @@ class TradingBot:
                     body=f"An error occurred: {e}"
                 )
                 await asyncio.sleep(60)
+
+    async def check_balance(self):
+        sol_balance = await get_balance(solana_client, self.wallet.pubkey())
+        logging.info(f"Current SOL balance: {sol_balance}")
+        if sol_balance == 0:
+            logging.error("SOL balance is zero. Cannot perform transactions.")
+            send_email(
+                subject="Trading Bot Alert: Zero Balance",
+                body="Your SOL balance is zero. Please top up your wallet to continue trading."
+            )
+            await self.discord_alert.send_message("Your SOL balance is zero. Please top up your wallet to continue trading.")
+            # Optionally, stop the bot
+            # await self.stop()
 
     async def fetch_data(self, symbol):
         try:
@@ -133,7 +157,7 @@ class TradingBot:
                 score = (volume / df['volume'].mean()) * (1 if 30 < rsi < 70 else 0.5)
                 token_scores[token] = score
             except Exception as e:
-                logging.error(f"Error fetching data for {token}: {e}")
+                logging.error(f"Error processing data for {token}: {e}")
 
         sorted_tokens = sorted(token_scores, key=token_scores.get, reverse=True)
         top_tokens = sorted_tokens[:self.top_n_tokens]
@@ -158,27 +182,23 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
 
         # Get response from LLM
         try:
-            response = openai.Completion.create(
-                engine='gpt-4o-mini',
-                prompt=prompt,
-                max_tokens=2048,
+            response = openai.ChatCompletion.create(
+                model='gpt-3.5-turbo',  # Set to your desired model
+                messages=[{'role': 'user', 'content': prompt}],
+                max_tokens=500,
                 temperature=0.7,
                 n=1,
                 stop=None,
             )
 
-            reasoning = response.choices[0].text.strip()
+            reasoning = response['choices'][0]['message']['content'].strip()
 
             # Extract decision
-            decision = None
+            decision = 'hold'  # Default to hold
             if 'BUY' in reasoning.upper():
                 decision = 'buy'
             elif 'SELL' in reasoning.upper():
                 decision = 'sell'
-            elif 'HOLD' in reasoning.upper():
-                decision = 'hold'
-            else:
-                decision = 'hold'  # Default to hold if no clear decision
 
             return reasoning, decision
         except Exception as e:
@@ -206,7 +226,7 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
         Performs a token swap on Raydium.
         """
         # Raydium program IDs and accounts
-        RAYDIUM_SWAP_PROGRAM_ID = Pubkey.from_string('rvkYEt3Qp6eC3Ndy6EMrxJD9F6xZjQ9S8dHEs7hY3vv')  # Raydium Swap Program ID
+        RAYDIUM_SWAP_PROGRAM_ID = Pubkey.from_string('rvkYEt3Qp6eC3Ndy6EMrxJD9F6xZjQ9S8dHEs7hY3vv')  # Update with correct ID
 
         # Token mints
         from_token_mint_address = self.token_mints.get(from_token_symbol)
@@ -258,6 +278,7 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
                 subject="Trading Bot Alert: Swap Failed",
                 body=f"Failed to swap {amount_in} units of {from_token_symbol} to {to_token_symbol}. Error: {e}"
             )
+            await self.discord_alert.send_message(f"Failed to swap {amount_in} units of {from_token_symbol} to {to_token_symbol}. Error: {e}")
 
     def create_swap_instruction(self, user_source_token_account, user_destination_token_account,
                                 user_authority, pool_info, amount_in):
@@ -321,12 +342,22 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
         logging.info(f"Initiating trade: {decision.upper()} {from_token} to {to_token}, Amount: {amount_in}")
         await self.perform_swap(from_token, to_token, amount_in)
 
+        trade_entry = {
+            'timestamp': pd.Timestamp.utcnow(),
+            'token': token_symbol,
+            'action': decision.upper(),
+            'amount': amount,
+            'price': None  # Will be updated after fetching data
+        }
+
+        data = await self.fetch_data(symbol)
+        if data.empty:
+            logging.error(f"Failed to fetch data for {symbol}")
+            return
+        latest_close = data['close'].iloc[-1]
+        trade_entry['price'] = latest_close
+
         if decision == 'buy':
-            data = await self.fetch_data(symbol)
-            if data.empty:
-                logging.error(f"Failed to fetch data for {symbol}")
-                return
-            latest_close = data['close'].iloc[-1]
             self.current_positions[token_symbol] = {
                 'amount': amount,
                 'purchase_price': latest_close
@@ -339,13 +370,57 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
             await self.discord_alert.send_message(f"Purchased {token_symbol} at {latest_close} USDT")
         elif decision == 'sell':
             if token_symbol in self.current_positions:
-                logging.info(f"Sold {token_symbol}")
+                purchase_price = self.current_positions[token_symbol]['purchase_price']
+                profit = (latest_close - purchase_price) * amount
+                # Update performance metrics
+                self.performance_metrics['total_profit'] += profit
+                self.performance_metrics['trades'] += 1
+                if profit > 0:
+                    self.performance_metrics['wins'] += 1
+                else:
+                    self.performance_metrics['losses'] += 1
+                logging.info(f"Sold {token_symbol} for a profit of {profit} USDT")
                 send_email(
                     subject=f"Trading Bot Alert: SELL {token_symbol}",
-                    body=f"Sold {token_symbol}"
+                    body=f"Sold {token_symbol} for a profit of {profit} USDT"
                 )
-                await self.discord_alert.send_message(f"Sold {token_symbol}")
+                await self.discord_alert.send_message(f"Sold {token_symbol} for a profit of {profit} USDT")
                 del self.current_positions[token_symbol]
+
+        # Add trade to recent trades
+        self.recent_trades.append(trade_entry)
+        # Keep only the latest 10 trades
+        self.recent_trades = self.recent_trades[-10:]
+
+    def add_indicators(self, df):
+        # Moving Averages
+        df['ma50'] = df['close'].rolling(window=50).mean()
+        df['ma200'] = df['close'].rolling(window=200).mean()
+        df['ema20'] = df['close'].ewm(span=20, adjust=False).mean()
+
+        # Technical Indicators
+        df['rsi14'] = ta.momentum.RSIIndicator(close=df['close'], window=14).rsi()
+
+        bb_indicator = ta.volatility.BollingerBands(close=df['close'], window=20, window_dev=2)
+        df['bb_high'] = bb_indicator.bollinger_hband()
+        df['bb_low'] = bb_indicator.bollinger_lband()
+
+        macd = ta.trend.MACD(close=df['close'])
+        df['macd'] = macd.macd()
+        df['macd_signal'] = macd.macd_signal()
+
+        stochastic = ta.momentum.StochasticOscillator(high=df['high'], low=df['low'], close=df['close'])
+        df['stoch_k'] = stochastic.stoch()
+        df['stoch_d'] = stochastic.stoch_signal()
+
+        return df
+
+    # Ensure fetch_news_for_token and analyze_sentiment are accessible
+    def fetch_news_for_token(self, token_symbol):
+        return fetch_news_for_token(token_symbol)
+
+    def analyze_sentiment(self, token_symbol):
+        return analyze_sentiment(token_symbol)
 
 # Instantiate the bot
 bot = TradingBot()
