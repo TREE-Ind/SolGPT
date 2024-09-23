@@ -9,7 +9,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-# Ensure that the Discord client is started before launching the app
+# Function to start the trading bot
 async def initialize_bot():
     await bot.start()
 
@@ -26,7 +26,7 @@ def stop_bot():
     return "Bot stopped."
 
 def get_bot_status():
-    status = "Running" if bot.running else "Stopped"
+    status = "🟢 Running" if bot.running else "🔴 Stopped"
     return status
 
 def get_positions():
@@ -106,14 +106,18 @@ def get_news_sentiment(token_symbol):
 
 def get_balance():
     try:
-        sol_balance = asyncio.run(get_balance(solana_client, bot.wallet.pubkey()))
+        sol_balance = asyncio.run(get_balance_func())
         return f"**SOL Balance:** {sol_balance:.5f} SOL"
     except Exception as e:
         return f"Error fetching balance: {e}"
 
+async def get_balance_func():
+    from solana_connection import get_balance
+    return await get_balance(bot.solana_client, bot.wallet.pubkey())
+
 with gr.Blocks() as demo:
     gr.Markdown("# 🪙 Solana AI Trading Bot Dashboard 🪙")
-
+    
     with gr.Tab("Control Panel"):
         gr.Markdown("## ⚙️ Bot Control")
         with gr.Row():
