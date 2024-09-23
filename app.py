@@ -122,7 +122,7 @@ async def get_ai_reasoning():
     reasoning_history = bot.get_reasoning_history()
     if reasoning_history:
         df = pd.DataFrame(reasoning_history)
-        df['timestamp'] = df['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
+        df['timestamp'] = pd.to_datetime(df['timestamp']).dt.strftime('%Y-%m-%d %H:%M:%S')
         return df
     else:
         return pd.DataFrame(columns=['timestamp', 'token', 'reasoning', 'decision'])
@@ -187,7 +187,7 @@ with gr.Blocks() as demo:
     
     with gr.Tab("🧠 AI Reasoning"):
         gr.Markdown("## 🤖 AI Decision Making Process")
-        reasoning_df = gr.DataFrame(value=get_ai_reasoning(), interactive=False)
+        reasoning_df = gr.DataFrame(interactive=False)
         refresh_reasoning_button = gr.Button("🔄 Refresh AI Reasoning")
     
     # Auto-refresh status, positions, and balance every 10 seconds
@@ -210,7 +210,7 @@ with gr.Blocks() as demo:
     demo.load(refresh_status_positions_balance_reasoning, inputs=None, outputs=[status_text, positions_df, balance_text, reasoning_df], every=10)
 
     # Update the refresh button click event
-    refresh_reasoning_button.click(get_ai_reasoning, inputs=None, outputs=reasoning_df)
+    refresh_reasoning_button.click(lambda: asyncio.run(get_ai_reasoning()), inputs=None, outputs=reasoning_df)
 
     # Add this at the end of the gr.Blocks() context
     demo.load(update_initial_balance, inputs=None, outputs=balance_text)
