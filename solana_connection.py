@@ -1,7 +1,12 @@
-import json
+# solana_connection.py
+
+from solana.rpc.async_api import AsyncClient
+from solders.keypair import Keypair
+from dotenv import load_dotenv
 import os
 import base64
-from solders.keypair import Keypair
+
+load_dotenv()
 
 def load_wallet():
     private_key_str = os.getenv("SOLANA_PRIVATE_KEY")
@@ -25,8 +30,3 @@ def load_wallet():
             return keypair
         except Exception as e:
             raise ValueError(f"Failed to decode private key: {e}")
-
-async def get_balance(client, public_key):
-    balance_response = await client.get_balance(public_key)
-    balance = balance_response['result']['value'] / 1e9  # Convert lamports to SOL
-    return balance
