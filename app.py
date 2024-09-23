@@ -115,6 +115,9 @@ async def get_news_sentiment(token_symbol):
     except Exception as e:
         return f"Error fetching news and sentiment: {e}"
 
+async def update_initial_balance():
+    return await get_balance()
+
 with gr.Blocks() as demo:
     gr.Markdown("# 🪙 Solana AI Trading Bot Dashboard 🪙")
     
