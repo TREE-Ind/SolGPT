@@ -106,9 +106,8 @@ class TradingBot:
                 # Check balance periodically
                 current_time = time.time()
                 if current_time - self.last_balance_check > self.balance_check_interval:
-                    sol_balance = await self.check_balance()
+                    await self.check_balance()
                     self.last_balance_check = current_time
-                    logging.info(f"Current SOL balance: {sol_balance}")
                 
                 # Discover new tokens periodically
                 if current_time - self.last_token_discovery > self.token_discovery_interval:
