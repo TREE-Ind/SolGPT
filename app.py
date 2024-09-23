@@ -73,10 +73,13 @@ def get_performance_metrics():
 def get_logs():
     try:
         with open('trading_bot.log', 'r') as f:
-            logs = f.read()
-        return logs
+            lines = f.readlines()
+            latest_logs = ''.join(lines[-100:])  # Get the last 100 lines
+            return latest_logs
     except FileNotFoundError:
         return "Log file not found."
+    except Exception as e:
+        return f"Error reading log file: {e}"
 
 async def get_price_chart(token_symbol):
     try:
@@ -156,25 +159,11 @@ def clear_logs():
     """
     try:
         open('trading_bot.log', 'w').close()
-        log_message("Log file cleared by user.", level='INFO')
+        logging.info("Log file cleared by user.")
         return "Log file has been cleared."
     except Exception as e:
-        log_message(f"Error clearing log file: {e}", level='ERROR')
+        logging.error(f"Error clearing log file: {e}")
         return f"Error clearing log file: {e}"
-
-def get_latest_logs(n=100):
-    """
-    Retrieves the latest n lines from the trading_bot.log file.
-    """
-    try:
-        with open('trading_bot.log', 'r') as f:
-            lines = f.readlines()
-            latest_logs = ''.join(lines[-n:])  # Get the last n lines
-            return latest_logs
-    except FileNotFoundError:
-        return "Log file not found."
-    except Exception as e:
-        return f"Error reading log file: {e}"
 
 with gr.Blocks() as demo:
     gr.Markdown("# 🪙 Solana AI Trading Bot Dashboard 🪙")
@@ -252,7 +241,7 @@ with gr.Blocks() as demo:
     
     with gr.Tab("Logs"):
         gr.Markdown("## 📝 Bot Logs")
-        logs_text = gr.Textbox(value=get_latest_logs(), lines=15, interactive=False)
+        logs_text = gr.Textbox(value=get_logs(), lines=15, interactive=False)
         with gr.Row():
             refresh_logs_button = gr.Button("🔄 Refresh Logs")
             clear_logs_button = gr.Button("🗑️ Clear Logs")
@@ -275,7 +264,7 @@ with gr.Blocks() as demo:
         lambda: (get_positions(), get_performance_metrics()),
         outputs=[positions_df, performance_text]
     )
-    refresh_logs_button.click(get_latest_logs, outputs=logs_text)
+    refresh_logs_button.click(get_logs, outputs=logs_text)
     clear_logs_button.click(clear_logs, outputs=logs_text)
     
     generate_price_chart.click(get_price_chart, inputs=token_input, outputs=price_chart)
@@ -294,7 +283,7 @@ with gr.Blocks() as demo:
 
     # Auto-refresh logs every 10 seconds
     demo.load(
-        get_latest_logs,
+        get_logs,
         outputs=logs_text,
         every=10
     )

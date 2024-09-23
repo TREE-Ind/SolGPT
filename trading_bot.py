@@ -72,6 +72,9 @@ class TradingBot:
         # Initialize Solana client as an instance attribute
         self.solana_client = AsyncClient("https://api.mainnet-beta.solana.com")
 
+        # Initialize the exchange using ccxt (e.g., Binance)
+        self.exchange = ccxt.binance({'enableRateLimit': True})
+
         # Initialize Discord Alert if configured
         DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
         DISCORD_CHANNEL_ID = os.getenv("DISCORD_CHANNEL_ID")
@@ -79,13 +82,13 @@ class TradingBot:
             try:
                 self.discord_alert = DiscordAlert(int(DISCORD_CHANNEL_ID), enabled=True)
                 asyncio.create_task(self.discord_alert.start(DISCORD_TOKEN))
-                log_message("Discord Alert initialized.", level='INFO')
+                logging.info("Discord Alert initialized.")
             except Exception as e:
-                log_message(f"Failed to initialize Discord Alert: {e}", level='ERROR')
+                logging.error(f"Failed to initialize Discord Alert: {e}")
                 self.discord_alert = None
         else:
             self.discord_alert = None
-            log_message("Discord Alert not configured. Skipping Discord integration.", level='WARNING')
+            logging.warning("Discord Alert not configured. Skipping Discord integration.")
 
         # Initialize Agents
         self.market_analysis_agent = MarketAnalysisAgent(self)
@@ -97,7 +100,7 @@ class TradingBot:
         if not self.running:
             self.running = True
             self.task = self.loop.create_task(self.run())
-            log_message("Trading bot started.", level='INFO')
+            logging.info("Trading bot started.")
 
     async def stop(self):
         if self.running:
@@ -109,7 +112,7 @@ class TradingBot:
                 await self.discord_alert.close_client()
             # Close Solana client
             await self.solana_client.close()
-            log_message("Trading bot stopped.", level='INFO')
+            logging.info("Trading bot stopped.")
 
     async def run(self):
         while self.running:
@@ -133,10 +136,10 @@ class TradingBot:
                 # Wait before next cycle
                 await asyncio.sleep(self.token_selection_interval)
             except asyncio.CancelledError:
-                log_message("Trading bot task cancelled.", level='INFO')
+                logging.info("Trading bot task cancelled.")
                 break
             except Exception as e:
-                log_message(f"Error in bot run loop: {e}", level='ERROR')
+                logging.error(f"Error in bot run loop: {e}")
                 if self.discord_alert:
                     await self.discord_alert.send_message(f"⚠️ An error occurred: {e}")
                 send_email(
@@ -149,11 +152,11 @@ class TradingBot:
         try:
             sol_balance = await get_balance(self.solana_client, self.wallet.pubkey())
             if sol_balance is not None:
-                log_message(f"Current SOL balance: {sol_balance}", level='INFO')
+                logging.info(f"Current SOL balance: {sol_balance}")
                 if self.discord_alert:
                     await self.discord_alert.send_message(f"🔍 Current SOL balance: {sol_balance}")
                 if sol_balance == 0:
-                    log_message("SOL balance is zero. Cannot perform transactions.", level='ERROR')
+                    logging.error("SOL balance is zero. Cannot perform transactions.")
                     if self.discord_alert:
                         await self.discord_alert.send_message("⚠️ Your SOL balance is zero. Please top up your wallet to continue trading.")
                     send_email(
@@ -163,7 +166,7 @@ class TradingBot:
                     # Optionally, stop the bot
                     # await self.stop()
             else:
-                log_message("Failed to fetch SOL balance.", level='ERROR')
+                logging.error("Failed to fetch SOL balance.")
                 if self.discord_alert:
                     await self.discord_alert.send_message("⚠️ Failed to fetch SOL balance.")
                 send_email(
@@ -171,7 +174,7 @@ class TradingBot:
                     body="Failed to fetch SOL balance."
                 )
         except Exception as e:
-            log_message(f"Failed to check balance: {e}", level='ERROR')
+            logging.error(f"Failed to check balance: {e}")
             if self.discord_alert:
                 await self.discord_alert.send_message(f"⚠️ Failed to check balance: {e}")
             send_email(
@@ -181,17 +184,17 @@ class TradingBot:
 
     async def fetch_data(self, symbol):
         try:
-            ohlcv = exchange.fetch_ohlcv(symbol, timeframe=self.timeframe, limit=self.limit)
+            ohlcv = self.exchange.fetch_ohlcv(symbol, timeframe=self.timeframe, limit=self.limit)
             df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
             df['datetime'] = pd.to_datetime(df['timestamp'], unit='ms')
             return df
         except Exception as e:
-            log_message(f"Error fetching data for {symbol}: {e}", level='ERROR')
+            logging.error(f"Error fetching data for {symbol}: {e}")
             return pd.DataFrame()
 
     async def select_top_tokens(self):
         try:
-            markets = exchange.load_markets()
+            markets = self.exchange.load_markets()
             tokens = [symbol for symbol in markets if '/USDT' in symbol and symbol != 'SOL/USDT']
 
             token_scores = {}
@@ -209,14 +212,14 @@ class TradingBot:
                     score = (volume / df['volume'].mean()) * (1 if 30 < rsi < 70 else 0.5)
                     token_scores[token] = score
                 except Exception as e:
-                    log_message(f"Error processing data for {token}: {e}", level='ERROR')
+                    logging.error(f"Error processing data for {token}: {e}")
 
             sorted_tokens = sorted(token_scores, key=token_scores.get, reverse=True)
             top_tokens = sorted_tokens[:self.top_n_tokens]
-            log_message(f"Selected top tokens: {top_tokens}", level='INFO')
+            logging.info(f"Selected top tokens: {top_tokens}")
             return top_tokens
         except Exception as e:
-            log_message(f"Error selecting top tokens: {e}", level='ERROR')
+            logging.error(f"Error selecting top tokens: {e}")
             return []
 
     async def advanced_reasoning_decision(self, token_symbol):
@@ -238,7 +241,7 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
 
             # Get response from LLM
             response = openai.ChatCompletion.create(
-                model='gpt-4o-mini',  # Set to 'gpt-4o-mini' if available
+                model='gpt-4o-mini',  # Reverted back to the original model
                 messages=[{'role': 'user', 'content': prompt}],
                 max_tokens=500,
                 temperature=0.7,
@@ -283,7 +286,7 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
             }
             return technical_summary
         except Exception as e:
-            log_message(f"Error getting technical data for {symbol}: {e}", level='ERROR')
+            logging.error(f"Error getting technical data for {symbol}: {e}")
             return {}
 
     async def perform_swap(self, from_token_symbol, to_token_symbol, amount_in):
@@ -299,7 +302,7 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
             to_token_mint_address = self.token_mints.get(to_token_symbol)
 
             if not from_token_mint_address or not to_token_mint_address:
-                log_message(f"Token mint addresses not found for {from_token_symbol} or {to_token_symbol}", level='ERROR')
+                logging.error(f"Token mint addresses not found for {from_token_symbol} or {to_token_symbol}")
                 return
 
             from_token_mint = Pubkey.from_string(from_token_mint_address)
@@ -312,7 +315,7 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
             # Get pool information for the token pair
             pool_info = find_pool_by_tokens(self.pools, from_token_mint_address, to_token_mint_address)
             if not pool_info:
-                log_message(f"No pool found for {from_token_symbol}/{to_token_symbol}", level='ERROR')
+                logging.error(f"No pool found for {from_token_symbol}/{to_token_symbol}")
                 return
 
             # Build transaction
@@ -331,7 +334,7 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
             response = await self.solana_client.send_transaction(
                 transaction, self.wallet, opts=TxOpts(preflight_commitment="confirmed")
             )
-            log_message(f"Swap transaction sent: {response}", level='INFO')
+            logging.info(f"Swap transaction sent: {response}")
             if self.discord_alert:
                 await self.discord_alert.send_message(f"✅ Swapped {amount_in} units of {from_token_symbol} to {to_token_symbol}. Transaction ID: {response}")
             send_email(
@@ -339,7 +342,7 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
                 body=f"Swapped {amount_in} units of {from_token_symbol} to {to_token_symbol}. Transaction ID: {response}"
             )
         except Exception as e:
-            log_message(f"Error performing swap: {e}", level='ERROR')
+            logging.error(f"Error performing swap: {e}")
             if self.discord_alert:
                 await self.discord_alert.send_message(f"❌ Failed to swap {amount_in} units of {from_token_symbol} to {to_token_symbol}. Error: {e}")
             send_email(
