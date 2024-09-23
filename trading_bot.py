@@ -106,9 +106,10 @@ class TradingBot:
                 # Check balance periodically
                 current_time = time.time()
                 if current_time - self.last_balance_check > self.balance_check_interval:
-                    await self.check_balance()
+                    sol_balance = await self.check_balance()
                     self.last_balance_check = current_time
-
+                    logging.info(f"Current SOL balance: {sol_balance}")
+                
                 # Discover new tokens periodically
                 if current_time - self.last_token_discovery > self.token_discovery_interval:
                     await self.discover_new_tokens()
@@ -238,7 +239,7 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
 
             # Get response from LLM
             response = openai.ChatCompletion.create(
-                model='gpt-4',  # Set to 'gpt-4o-mini' if available
+                model='gpt-4o-mini',  # Set to 'gpt-4o-mini' if available
                 messages=[{'role': 'user', 'content': prompt}],
                 max_tokens=500,
                 temperature=0.7,
