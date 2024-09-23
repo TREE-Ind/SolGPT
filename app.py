@@ -182,17 +182,15 @@ with gr.Blocks() as demo:
     
     demo.load(refresh_status_positions_balance, inputs=None, outputs=[status_text, positions_df, balance_text], every=10)
 
-# Add this function at the end of the file
-async def update_initial_balance():
-    return await get_balance()
+    # Add this at the end of the gr.Blocks() context
+    demo.load(update_initial_balance, inputs=None, outputs=balance_text)
 
 # Modify the main block
 if __name__ == "__main__":
     # Start the trading bot in a separate thread
     threading.Thread(target=start_bot, daemon=True).start()
     
-    # Launch the Gradio interface with the initial balance update
-    demo.load(update_initial_balance, inputs=None, outputs=balance_text)
+    # Launch the Gradio interface
     demo.launch(server_name=os.getenv("GRADIO_HOST", "0.0.0.0"),
                 server_port=int(os.getenv("GRADIO_PORT", "7860")),
                 share=False)
