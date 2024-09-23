@@ -127,6 +127,13 @@ async def get_ai_reasoning():
     else:
         return pd.DataFrame(columns=['timestamp', 'token', 'reasoning', 'decision'])
 
+async def get_discovered_tokens():
+    return pd.DataFrame(list(bot.discovered_tokens), columns=['Token'])
+
+async def get_top_tokens():
+    top_tokens = await bot.select_top_tokens()
+    return pd.DataFrame(top_tokens, columns=['Token'])
+
 with gr.Blocks() as demo:
     gr.Markdown("# 🪙 Solana AI Trading Bot Dashboard 🪙")
     
@@ -143,89 +150,99 @@ with gr.Blocks() as demo:
         stop_button.click(stop_bot, outputs=status_text)
         refresh_balance_button.click(get_balance, inputs=None, outputs=balance_text)
     
-    with gr.Tab("📈 Current Positions"):
-        gr.Markdown("## 📊 Current Positions")
-        positions_df = gr.DataFrame(value=get_positions(), interactive=False)
+    with gr.Tab("Bot Steps"):
+        gr.Markdown("## 🔍 Bot Step-by-Step Process")
+        
+        with gr.Accordion("Step 1: Token Discovery"):
+            gr.Markdown("### 🔎 Newly Discovered Tokens")
+            discovered_tokens_df = gr.DataFrame(interactive=False)
+            refresh_discovered_tokens = gr.Button("🔄 Refresh Discovered Tokens")
+        
+        with gr.Accordion("Step 2: Top Token Selection"):
+            gr.Markdown("### 🏆 Top Selected Tokens")
+            top_tokens_df = gr.DataFrame(interactive=False)
+            refresh_top_tokens = gr.Button("🔄 Refresh Top Tokens")
+        
+        with gr.Accordion("Step 3: AI Analysis and Decision"):
+            gr.Markdown("### 🧠 AI Reasoning and Decisions")
+            reasoning_df = gr.DataFrame(interactive=False)
+            refresh_reasoning_button = gr.Button("🔄 Refresh AI Reasoning")
+        
+        with gr.Accordion("Step 4: Trade Execution"):
+            gr.Markdown("### 💼 Recent Trades")
+            trades_df = gr.DataFrame(value=get_recent_trades(), interactive=False)
+            refresh_trades_button = gr.Button("🔄 Refresh Recent Trades")
     
-    with gr.Tab("💼 Recent Trades"):
-        gr.Markdown("## 🔄 Recent Trades")
-        trades_df = gr.DataFrame(value=get_recent_trades(), interactive=False)
-    
-    with gr.Tab("📊 Performance Metrics"):
-        gr.Markdown("## 📈 Performance Metrics")
-        performance_text = gr.Markdown(get_performance_metrics())
-    
-    with gr.Tab("📉 Price Charts"):
-        gr.Markdown("## 📈 Token Price Chart")
+    with gr.Tab("Portfolio"):
+        gr.Markdown("## 📊 Current Portfolio")
         with gr.Row():
-            token_input = gr.Textbox(label="🔠 Token Symbol", placeholder="Enter token symbol (e.g., SOL)", value="SOL")
-            generate_price_chart = gr.Button("Generate Chart")
-        price_chart = gr.Plot()
-        generate_price_chart.click(get_price_chart, inputs=token_input, outputs=price_chart)
+            with gr.Column():
+                gr.Markdown("### 📈 Current Positions")
+                positions_df = gr.DataFrame(value=get_positions(), interactive=False)
+            with gr.Column():
+                gr.Markdown("### 📊 Performance Metrics")
+                performance_text = gr.Markdown(get_performance_metrics())
+        refresh_portfolio_button = gr.Button("🔄 Refresh Portfolio")
     
-    with gr.Tab("📊 Technical Analysis"):
-        gr.Markdown("## 📉 Technical Indicators")
-        with gr.Row():
-            tech_token_input = gr.Textbox(label="🔠 Token Symbol", placeholder="Enter token symbol (e.g., SOL)", value="SOL")
-            generate_tech_chart = gr.Button("Generate Chart")
-        technical_chart = gr.Plot()
-        generate_tech_chart.click(get_technical_chart, inputs=tech_token_input, outputs=technical_chart)
+    with gr.Tab("Market Analysis"):
+        gr.Markdown("## 📊 Market Analysis Tools")
+        
+        with gr.Accordion("Price Charts"):
+            gr.Markdown("### 📈 Token Price Chart")
+            with gr.Row():
+                token_input = gr.Textbox(label="🔠 Token Symbol", placeholder="Enter token symbol (e.g., SOL)", value="SOL")
+                generate_price_chart = gr.Button("Generate Chart")
+            price_chart = gr.Plot()
+        
+        with gr.Accordion("Technical Analysis"):
+            gr.Markdown("### 📉 Technical Indicators")
+            with gr.Row():
+                tech_token_input = gr.Textbox(label="🔠 Token Symbol", placeholder="Enter token symbol (e.g., SOL)", value="SOL")
+                generate_tech_chart = gr.Button("Generate Chart")
+            technical_chart = gr.Plot()
+        
+        with gr.Accordion("News and Sentiment"):
+            gr.Markdown("### 📰 News and Sentiment Analysis")
+            with gr.Row():
+                news_token_input = gr.Textbox(label="🔠 Token Symbol", placeholder="Enter token symbol (e.g., SOL)", value="SOL")
+                generate_news_sentiment = gr.Button("Get News & Sentiment")
+            news_sentiment_text = gr.Markdown()
     
-    with gr.Tab("📰 News and Sentiment"):
-        gr.Markdown("## 📰 News and Sentiment Analysis")
-        with gr.Row():
-            news_token_input = gr.Textbox(label="🔠 Token Symbol", placeholder="Enter token symbol (e.g., SOL)", value="SOL")
-            generate_news_sentiment = gr.Button("Get News & Sentiment")
-        news_sentiment_text = gr.Markdown()
-        generate_news_sentiment.click(get_news_sentiment, inputs=news_token_input, outputs=news_sentiment_text)
-    
-    with gr.Tab("📝 Logs"):
-        gr.Markdown("## 📜 Bot Logs")
+    with gr.Tab("Logs"):
+        gr.Markdown("## 📝 Bot Logs")
         logs_text = gr.Textbox(value=get_logs(), lines=15, interactive=False)
         refresh_logs_button = gr.Button("🔄 Refresh Logs")
-        refresh_logs_button.click(fn=get_logs, inputs=None, outputs=logs_text)
     
-    with gr.Tab("🧠 AI Reasoning"):
-        gr.Markdown("## 🤖 AI Decision Making Process")
-        reasoning_df = gr.DataFrame(interactive=False)
-        refresh_reasoning_button = gr.Button("🔄 Refresh AI Reasoning")
+    # Set up refresh functions
+    refresh_discovered_tokens.click(lambda: asyncio.run(get_discovered_tokens()), outputs=discovered_tokens_df)
+    refresh_top_tokens.click(lambda: asyncio.run(get_top_tokens()), outputs=top_tokens_df)
+    refresh_reasoning_button.click(lambda: asyncio.run(get_ai_reasoning()), outputs=reasoning_df)
+    refresh_trades_button.click(get_recent_trades, outputs=trades_df)
+    refresh_portfolio_button.click(
+        lambda: (get_positions(), get_performance_metrics()),
+        outputs=[positions_df, performance_text]
+    )
+    refresh_logs_button.click(get_logs, outputs=logs_text)
     
-    # Auto-refresh status, positions, and balance every 10 seconds
-    async def refresh_status_positions_balance():
-        status = get_bot_status()
-        positions = get_positions()
-        balance = await get_balance()
-        return status, positions, balance
-    
-    demo.load(refresh_status_positions_balance, inputs=None, outputs=[status_text, positions_df, balance_text], every=10)
+    generate_price_chart.click(get_price_chart, inputs=token_input, outputs=price_chart)
+    generate_tech_chart.click(get_technical_chart, inputs=tech_token_input, outputs=technical_chart)
+    generate_news_sentiment.click(get_news_sentiment, inputs=news_token_input, outputs=news_sentiment_text)
 
-    # Add this to the existing refresh function
-    async def refresh_status_positions_balance_reasoning():
-        status = get_bot_status()
-        positions = get_positions()
-        balance = await get_balance()
-        reasoning = await get_ai_reasoning()
-        return status, positions, balance, reasoning
-    
-    demo.load(refresh_status_positions_balance_reasoning, inputs=None, outputs=[status_text, positions_df, balance_text, reasoning_df], every=10)
+    # Auto-refresh every 30 seconds
+    demo.load(
+        lambda: asyncio.run(refresh_status_positions_balance_reasoning()),
+        outputs=[status_text, positions_df, balance_text, reasoning_df],
+        every=30
+    )
 
-    # Update the refresh button click event
-    refresh_reasoning_button.click(lambda: asyncio.run(get_ai_reasoning()), inputs=None, outputs=reasoning_df)
+    # Initial balance update
+    demo.load(update_initial_balance, outputs=balance_text)
 
-    # Add this at the end of the gr.Blocks() context
-    demo.load(update_initial_balance, inputs=None, outputs=balance_text)
-
-# Modify the main block
 if __name__ == "__main__":
-    # Start the trading bot in a separate thread
     threading.Thread(target=start_bot, daemon=True).start()
-    
-    # Launch the Gradio interface
-    demo.launch(server_name=os.getenv("GRADIO_HOST", "0.0.0.0"),
-                server_port=int(os.getenv("GRADIO_PORT", "7860")),
-                share=False)
-
-# Remove the conflicting asyncio loop
-# Keep the main thread alive by letting Gradio handle the event loop
-# No need for asyncio.get_event_loop().run_forever()
+    demo.launch(
+        server_name=os.getenv("GRADIO_HOST", "0.0.0.0"),
+        server_port=int(os.getenv("GRADIO_PORT", "7860")),
+        share=False
+    )
 
