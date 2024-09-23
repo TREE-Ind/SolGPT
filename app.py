@@ -150,6 +150,32 @@ async def refresh_top_tokens_async():
 async def refresh_reasoning_async():
     return await get_ai_reasoning()
 
+def clear_logs():
+    """
+    Clears the contents of the trading_bot.log file.
+    """
+    try:
+        open('trading_bot.log', 'w').close()
+        log_message("Log file cleared by user.", level='INFO')
+        return "Log file has been cleared."
+    except Exception as e:
+        log_message(f"Error clearing log file: {e}", level='ERROR')
+        return f"Error clearing log file: {e}"
+
+def get_latest_logs(n=100):
+    """
+    Retrieves the latest n lines from the trading_bot.log file.
+    """
+    try:
+        with open('trading_bot.log', 'r') as f:
+            lines = f.readlines()
+            latest_logs = ''.join(lines[-n:])  # Get the last n lines
+            return latest_logs
+    except FileNotFoundError:
+        return "Log file not found."
+    except Exception as e:
+        return f"Error reading log file: {e}"
+
 with gr.Blocks() as demo:
     gr.Markdown("# 🪙 Solana AI Trading Bot Dashboard 🪙")
     
@@ -226,8 +252,10 @@ with gr.Blocks() as demo:
     
     with gr.Tab("Logs"):
         gr.Markdown("## 📝 Bot Logs")
-        logs_text = gr.Textbox(value=get_logs(), lines=15, interactive=False)
-        refresh_logs_button = gr.Button("🔄 Refresh Logs")
+        logs_text = gr.Textbox(value=get_latest_logs(), lines=15, interactive=False)
+        with gr.Row():
+            refresh_logs_button = gr.Button("🔄 Refresh Logs")
+            clear_logs_button = gr.Button("🗑️ Clear Logs")
     
     # Set up refresh functions
     refresh_discovered_tokens.click(
@@ -247,7 +275,8 @@ with gr.Blocks() as demo:
         lambda: (get_positions(), get_performance_metrics()),
         outputs=[positions_df, performance_text]
     )
-    refresh_logs_button.click(get_logs, outputs=logs_text)
+    refresh_logs_button.click(get_latest_logs, outputs=logs_text)
+    clear_logs_button.click(clear_logs, outputs=logs_text)
     
     generate_price_chart.click(get_price_chart, inputs=token_input, outputs=price_chart)
     generate_tech_chart.click(get_technical_chart, inputs=tech_token_input, outputs=technical_chart)
@@ -262,6 +291,13 @@ with gr.Blocks() as demo:
 
     # Initial balance update
     demo.load(update_initial_balance, outputs=balance_text)
+
+    # Auto-refresh logs every 10 seconds
+    demo.load(
+        get_latest_logs,
+        outputs=logs_text,
+        every=10
+    )
 
 if __name__ == "__main__":
     threading.Thread(target=start_bot, daemon=True).start()
