@@ -44,12 +44,9 @@ async def get_balance(client: AsyncClient, pubkey: str) -> float:
         float: The SOL balance.
     """
     try:
-        resp = await client.get_balance(pubkey)
-        if resp['result']:
-            lamports = resp['result']['value']
-            sol = lamports / 1_000_000_000  # Convert lamports to SOL
-            return sol
-        else:
-            raise ValueError("Failed to fetch balance.")
+        response = await client.get_balance(pubkey)
+        # The balance is now directly accessible from the response
+        return response.value / 10**9  # Convert lamports to SOL
     except Exception as e:
-        raise ValueError(f"Error fetching balance: {e}")
+        logging.error(f"Error fetching balance: {e}")
+        return None
