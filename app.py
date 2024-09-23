@@ -134,6 +134,13 @@ async def get_top_tokens():
     top_tokens = await bot.select_top_tokens()
     return pd.DataFrame(top_tokens, columns=['Token'])
 
+async def refresh_status_positions_balance_reasoning():
+    status = get_bot_status()
+    positions = get_positions()
+    balance = await get_balance()
+    reasoning = await get_ai_reasoning()
+    return status, positions, balance, reasoning
+
 with gr.Blocks() as demo:
     gr.Markdown("# 🪙 Solana AI Trading Bot Dashboard 🪙")
     
@@ -230,7 +237,7 @@ with gr.Blocks() as demo:
 
     # Auto-refresh every 30 seconds
     demo.load(
-        lambda: asyncio.run(refresh_status_positions_balance_reasoning()),
+        refresh_status_positions_balance_reasoning,
         outputs=[status_text, positions_df, balance_text, reasoning_df],
         every=30
     )
@@ -244,5 +251,5 @@ if __name__ == "__main__":
         server_name=os.getenv("GRADIO_HOST", "0.0.0.0"),
         server_port=int(os.getenv("GRADIO_PORT", "7860")),
         share=False
-    )
+   )
 
