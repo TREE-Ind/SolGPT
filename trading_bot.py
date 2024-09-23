@@ -135,19 +135,28 @@ class TradingBot:
     async def check_balance(self):
         try:
             sol_balance = await get_balance(self.solana_client, self.wallet.pubkey())
-            logging.info(f"Current SOL balance: {sol_balance}")
-            if self.discord_alert:
-                await self.discord_alert.send_message(f"🔍 Current SOL balance: {sol_balance}")
-            if sol_balance == 0:
-                logging.error("SOL balance is zero. Cannot perform transactions.")
+            if sol_balance is not None:
+                logging.info(f"Current SOL balance: {sol_balance}")
                 if self.discord_alert:
-                    await self.discord_alert.send_message("⚠️ Your SOL balance is zero. Please top up your wallet to continue trading.")
+                    await self.discord_alert.send_message(f"🔍 Current SOL balance: {sol_balance}")
+                if sol_balance == 0:
+                    logging.error("SOL balance is zero. Cannot perform transactions.")
+                    if self.discord_alert:
+                        await self.discord_alert.send_message("⚠️ Your SOL balance is zero. Please top up your wallet to continue trading.")
+                    send_email(
+                        subject="Trading Bot Alert: Zero Balance",
+                        body="Your SOL balance is zero. Please top up your wallet to continue trading."
+                    )
+                    # Optionally, stop the bot
+                    # await self.stop()
+            else:
+                logging.error("Failed to fetch SOL balance.")
+                if self.discord_alert:
+                    await self.discord_alert.send_message("⚠️ Failed to fetch SOL balance.")
                 send_email(
-                    subject="Trading Bot Alert: Zero Balance",
-                    body="Your SOL balance is zero. Please top up your wallet to continue trading."
+                    subject="Trading Bot Alert: Balance Check Failed",
+                    body="Failed to fetch SOL balance."
                 )
-                # Optionally, stop the bot
-                # await self.stop()
         except Exception as e:
             logging.error(f"Failed to check balance: {e}")
             if self.discord_alert:
