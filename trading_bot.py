@@ -117,6 +117,8 @@ class TradingBot:
     async def run(self):
         while self.running:
             try:
+                log_message("Starting a new trading cycle", level='INFO')
+                
                 # Check balance periodically
                 current_time = time.time()
                 if current_time - self.last_balance_check > self.balance_check_interval:
@@ -129,17 +131,24 @@ class TradingBot:
                     self.last_token_discovery = current_time
 
                 # Agent-Based Operations
+                log_message("Starting market analysis", level='INFO')
                 await self.market_analysis_agent.perform_analysis()
+                
+                log_message("Evaluating risks", level='INFO')
                 await self.risk_management_agent.evaluate_risks()
+                
+                log_message("Executing trades", level='INFO')
                 await self.trade_execution_agent.execute_trades()
+
+                log_message("Trading cycle completed", level='INFO')
 
                 # Wait before next cycle
                 await asyncio.sleep(self.token_selection_interval)
             except asyncio.CancelledError:
-                logging.info("Trading bot task cancelled.")
+                log_message("Trading bot task cancelled.", level='INFO')
                 break
             except Exception as e:
-                logging.error(f"Error in bot run loop: {e}")
+                log_message(f"Error in bot run loop: {e}", level='ERROR')
                 if self.discord_alert:
                     await self.discord_alert.send_message(f"⚠️ An error occurred: {e}")
                 send_email(
@@ -474,31 +483,12 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
             )
 
     async def discover_new_tokens(self):
-        try:
-            async with aiohttp.ClientSession() as session:
-                url = "https://public-api.solscan.io/token/list"
-                params = {
-                    "sortBy": "createTime",
-                    "sortType": "desc",
-                    "limit": 50  # Adjust this number as needed
-                }
-                async with session.get(url, params=params) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        for token in data['data']:
-                            token_symbol = token.get('symbol', '')
-                            if token_symbol and token_symbol not in self.discovered_tokens:
-                                self.discovered_tokens.add(token_symbol)
-                                logging.info(f"Discovered new Solana token: {token_symbol}")
-                                
-                                # You might want to add additional checks here, such as:
-                                # - Minimum liquidity
-                                # - Presence in Raydium pools
-                                # - Token metadata verification
-                                
-                                # For now, we'll just log the discovery
-        except Exception as e:
-            logging.error(f"Error discovering new Solana tokens: {e}")
+        log_message("Starting token discovery process", level='INFO')
+        # Implement your token discovery logic here
+        # For example:
+        # new_tokens = await self.fetch_new_tokens_from_exchange()
+        # self.discovered_tokens.update(new_tokens)
+        log_message("Token discovery process completed", level='INFO')
 
     async def fetch_news_for_token(self, token_symbol):
         try:
