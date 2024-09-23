@@ -1,4 +1,5 @@
 import asyncio
+from utils import log_message
 
 class NotificationAgent:
     def __init__(self, bot):

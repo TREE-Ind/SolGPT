@@ -1,5 +1,4 @@
 import asyncio
-import logging
 from utils import log_message
 
 class MarketAnalysisAgent:
