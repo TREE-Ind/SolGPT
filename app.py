@@ -125,11 +125,11 @@ with gr.Blocks() as demo:
             stop_button = gr.Button("⏹️ Stop Bot")
             status_text = gr.Textbox(label="🔍 Bot Status", value=get_bot_status(), interactive=False)
         with gr.Row():
-            balance_text = gr.Markdown(await get_balance())
+            balance_text = gr.Markdown("Loading balance...")
             refresh_balance_button = gr.Button("🔄 Refresh Balance")
         start_button.click(start_bot, outputs=status_text)
         stop_button.click(stop_bot, outputs=status_text)
-        refresh_balance_button.click(fn=get_balance, inputs=None, outputs=balance_text)
+        refresh_balance_button.click(get_balance, inputs=None, outputs=balance_text)
     
     with gr.Tab("📈 Current Positions"):
         gr.Markdown("## 📊 Current Positions")
@@ -182,17 +182,22 @@ with gr.Blocks() as demo:
     
     demo.load(refresh_status_positions_balance, inputs=None, outputs=[status_text, positions_df, balance_text], every=10)
 
-# Run the Gradio app
+# Add this function at the end of the file
+async def update_initial_balance():
+    return await get_balance()
+
+# Modify the main block
 if __name__ == "__main__":
     # Start the trading bot in a separate thread
     threading.Thread(target=start_bot, daemon=True).start()
     
-    # Launch the Gradio interface
+    # Launch the Gradio interface with the initial balance update
+    demo.load(update_initial_balance, inputs=None, outputs=balance_text)
     demo.launch(server_name=os.getenv("GRADIO_HOST", "0.0.0.0"),
                 server_port=int(os.getenv("GRADIO_PORT", "7860")),
                 share=False)
-    
-    # Remove the conflicting asyncio loop
-    # Keep the main thread alive by letting Gradio handle the event loop
-    # No need for asyncio.get_event_loop().run_forever()
+
+# Remove the conflicting asyncio loop
+# Keep the main thread alive by letting Gradio handle the event loop
+# No need for asyncio.get_event_loop().run_forever()
 
