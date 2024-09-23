@@ -2,29 +2,34 @@
 
 import smtplib
 from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from dotenv import load_dotenv
 import os
-import logging
+from dotenv import load_dotenv
 
 load_dotenv()
 
-EMAIL_ADDRESS = os.getenv("ALERT_EMAIL")
-EMAIL_PASSWORD = os.getenv("ALERT_EMAIL_PASSWORD")
-RECIPIENT_EMAIL = os.getenv("RECIPIENT_EMAIL")
+EMAIL_HOST = os.getenv("EMAIL_HOST")
+EMAIL_PORT = os.getenv("EMAIL_PORT")
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True") == "True"
+EMAIL_RECIPIENT = os.getenv("EMAIL_RECIPIENT")
 
 def send_email(subject, body):
-    msg = MIMEMultipart()
-    msg['From'] = EMAIL_ADDRESS
-    msg['To'] = RECIPIENT_EMAIL
-    msg['Subject'] = subject
+    if not all([EMAIL_HOST, EMAIL_PORT, EMAIL_HOST_USER, EMAIL_HOST_PASSWORD, EMAIL_RECIPIENT]):
+        print("Email alert is not configured. Skipping email.")
+        return
 
-    msg.attach(MIMEText(body, 'plain'))
+    msg = MIMEText(body)
+    msg['Subject'] = subject
+    msg['From'] = EMAIL_HOST_USER
+    msg['To'] = EMAIL_RECIPIENT
 
     try:
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-            server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+        with smtplib.SMTP(EMAIL_HOST, int(EMAIL_PORT)) as server:
+            if EMAIL_USE_TLS:
+                server.starttls()
+            server.login(EMAIL_HOST_USER, EMAIL_HOST_PASSWORD)
             server.send_message(msg)
-        logging.info(f"Email sent: {subject}")
+        print(f"Email sent: {subject}")
     except Exception as e:
-        logging.error(f"Failed to send email: {e}")
+        print(f"Failed to send email: {e}")
