@@ -27,6 +27,10 @@ import struct
 import time
 import aiohttp
 import json
+from agents.market_analysis import MarketAnalysisAgent
+from agents.trade_execution import TradeExecutionAgent
+from agents.risk_management import RiskManagementAgent
+from agents.notification import NotificationAgent
 
 # Configure logging
 logging.basicConfig(
@@ -63,6 +67,7 @@ class TradingBot:
         self.token_discovery_interval = 3600  # 1 hour
         self.last_token_discovery = 0
         self.discovered_tokens = set()
+        self.trade_signals = {}  # Dictionary to hold trade signals from MarketAnalysisAgent
 
         # Initialize Solana client as an instance attribute
         self.solana_client = AsyncClient("https://api.mainnet-beta.solana.com")
@@ -81,6 +86,12 @@ class TradingBot:
         else:
             self.discord_alert = None
             logging.info("Discord Alert not configured. Skipping Discord integration.")
+
+        # Initialize Agents
+        self.market_analysis_agent = MarketAnalysisAgent(self)
+        self.trade_execution_agent = TradeExecutionAgent(self)
+        self.risk_management_agent = RiskManagementAgent(self)
+        self.notification_agent = NotificationAgent(self)
 
     async def start(self):
         if not self.running:
@@ -114,21 +125,10 @@ class TradingBot:
                     await self.discover_new_tokens()
                     self.last_token_discovery = current_time
 
-                top_tokens = await self.select_top_tokens()
-                for symbol in top_tokens:
-                    token_symbol = symbol.split('/')[0]
-                    reasoning, decision = await self.advanced_reasoning_decision(token_symbol)
-                    logging.info(f"Token: {token_symbol}, Decision: {decision.upper()}, Reasoning: {reasoning}")
-
-                    # Store the reasoning for display in Gradio
-                    self.store_reasoning(token_symbol, reasoning, decision)
-
-                    if decision == 'buy' and token_symbol not in self.current_positions:
-                        await self.make_trade(symbol, 'buy')
-                    elif decision == 'sell' and token_symbol in self.current_positions:
-                        await self.make_trade(symbol, 'sell')
-                    else:
-                        logging.info(f"No trade action for {token_symbol}")
+                # Agent-Based Operations
+                await self.market_analysis_agent.perform_analysis()
+                await self.risk_management_agent.evaluate_risks()
+                await self.trade_execution_agent.execute_trades()
 
                 # Wait before next cycle
                 await asyncio.sleep(self.token_selection_interval)

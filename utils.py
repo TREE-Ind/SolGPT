@@ -2,6 +2,7 @@
 
 import pandas as pd
 import ta
+import logging
 
 def add_indicators(df):
     # Moving Averages
@@ -25,3 +26,13 @@ def add_indicators(df):
     df['stoch_d'] = stochastic.stoch_signal()
 
     return df
+
+def log_message(message: str, level: str = 'INFO'):
+    if level == 'INFO':
+        logging.info(message)
+    elif level == 'WARNING':
+        logging.warning(message)
+    elif level == 'ERROR':
+        logging.error(message)
+    else:
+        logging.debug(message)

@@ -7,6 +7,8 @@ import tweepy
 import logging
 import re
 from textblob import TextBlob
+import aiohttp
+from typing import List
 
 load_dotenv()
 
@@ -46,3 +48,26 @@ def analyze_sentiment(token_symbol):
     except Exception as e:
         logging.error(f"Error fetching tweets: {e}")
         return 0
+
+async def fetch_all_news(self, token_symbols: List[str]) -> dict:
+    news_data = {}
+    async with aiohttp.ClientSession() as session:
+        tasks = [self.fetch_news_for_token(session, symbol) for symbol in token_symbols]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for symbol, result in zip(token_symbols, results):
+            if isinstance(result, Exception):
+                news_data[symbol] = "Error fetching news."
+            else:
+                news_data[symbol] = result
+    return news_data
+
+async def fetch_news_for_token(self, session: aiohttp.ClientSession, token_symbol: str) -> str:
+    url = f'https://newsapi.org/v2/everything?q={token_symbol}&language=en&apiKey={NEWS_API_KEY}'
+    async with session.get(url) as response:
+        if response.status == 200:
+            data = await response.json()
+            articles = data.get('articles', [])
+            news_list = [article['title'] for article in articles[:5]]
+            return "\n".join(news_list)
+        else:
+            raise Exception(f"Failed to fetch news for {token_symbol}, Status Code: {response.status}")

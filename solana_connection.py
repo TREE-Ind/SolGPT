@@ -6,6 +6,7 @@ from solana.rpc.async_api import AsyncClient
 from solders.keypair import Keypair
 from dotenv import load_dotenv
 import os
+import logging
 
 load_dotenv()
 
@@ -46,6 +47,7 @@ async def get_balance(client: AsyncClient, pubkey: str) -> float:
     try:
         response = await client.get_balance(pubkey)
         # The balance is now directly accessible from the response
+        logging.debug(f"Fetched balance for {pubkey}: {response.value / 10**9} SOL")
         return response.value / 10**9  # Convert lamports to SOL
     except Exception as e:
         logging.error(f"Error fetching balance: {e}")

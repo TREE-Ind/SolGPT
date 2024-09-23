@@ -141,6 +141,15 @@ async def refresh_status_positions_balance_reasoning():
     reasoning = await get_ai_reasoning()
     return status, positions, balance, reasoning
 
+async def refresh_discovered_tokens_async():
+    return await get_discovered_tokens()
+
+async def refresh_top_tokens_async():
+    return await get_top_tokens()
+
+async def refresh_reasoning_async():
+    return await get_ai_reasoning()
+
 with gr.Blocks() as demo:
     gr.Markdown("# 🪙 Solana AI Trading Bot Dashboard 🪙")
     
@@ -221,9 +230,18 @@ with gr.Blocks() as demo:
         refresh_logs_button = gr.Button("🔄 Refresh Logs")
     
     # Set up refresh functions
-    refresh_discovered_tokens.click(lambda: asyncio.run(get_discovered_tokens()), outputs=discovered_tokens_df)
-    refresh_top_tokens.click(lambda: asyncio.run(get_top_tokens()), outputs=top_tokens_df)
-    refresh_reasoning_button.click(lambda: asyncio.run(get_ai_reasoning()), outputs=reasoning_df)
+    refresh_discovered_tokens.click(
+        lambda: asyncio.run(refresh_discovered_tokens_async()),
+        outputs=discovered_tokens_df
+    )
+    refresh_top_tokens.click(
+        lambda: asyncio.run(refresh_top_tokens_async()),
+        outputs=top_tokens_df
+    )
+    refresh_reasoning_button.click(
+        lambda: asyncio.run(refresh_reasoning_async()),
+        outputs=reasoning_df
+    )
     refresh_trades_button.click(get_recent_trades, outputs=trades_df)
     refresh_portfolio_button.click(
         lambda: (get_positions(), get_performance_metrics()),
