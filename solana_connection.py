@@ -1,10 +1,11 @@
 # solana_connection.py
 
+import json
+import base64
 from solana.rpc.async_api import AsyncClient
 from solders.keypair import Keypair
 from dotenv import load_dotenv
 import os
-import base64
 
 load_dotenv()
 
@@ -30,3 +31,25 @@ def load_wallet():
             return keypair
         except Exception as e:
             raise ValueError(f"Failed to decode private key: {e}")
+
+async def get_balance(client: AsyncClient, pubkey: str) -> float:
+    """
+    Fetches the SOL balance for a given public key.
+
+    Args:
+        client (AsyncClient): The Solana RPC client.
+        pubkey (str): The public key of the wallet.
+
+    Returns:
+        float: The SOL balance.
+    """
+    try:
+        resp = await client.get_balance(pubkey)
+        if resp['result']:
+            lamports = resp['result']['value']
+            sol = lamports / 1_000_000_000  # Convert lamports to SOL
+            return sol
+        else:
+            raise ValueError("Failed to fetch balance.")
+    except Exception as e:
+        raise ValueError(f"Error fetching balance: {e}")
