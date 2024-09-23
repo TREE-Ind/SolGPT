@@ -25,6 +25,8 @@ from spl.token.async_client import AsyncToken
 from spl.token.instructions import get_associated_token_address
 import struct
 import time
+import aiohttp
+import json
 
 # Configure logging
 logging.basicConfig(
@@ -58,6 +60,9 @@ class TradingBot:
         self.performance_metrics = {'total_profit': 0, 'trades': 0, 'wins': 0, 'losses': 0}
         self.balance_check_interval = 300  # Check balance every 5 minutes
         self.last_balance_check = 0
+        self.token_discovery_interval = 3600  # 1 hour
+        self.last_token_discovery = 0
+        self.discovered_tokens = set()
 
         # Initialize Solana client as an instance attribute
         self.solana_client = AsyncClient("https://api.mainnet-beta.solana.com")
@@ -104,11 +109,19 @@ class TradingBot:
                     await self.check_balance()
                     self.last_balance_check = current_time
 
+                # Discover new tokens periodically
+                if current_time - self.last_token_discovery > self.token_discovery_interval:
+                    await self.discover_new_tokens()
+                    self.last_token_discovery = current_time
+
                 top_tokens = await self.select_top_tokens()
                 for symbol in top_tokens:
                     token_symbol = symbol.split('/')[0]
                     reasoning, decision = await self.advanced_reasoning_decision(token_symbol)
                     logging.info(f"Token: {token_symbol}, Decision: {decision.upper()}, Reasoning: {reasoning}")
+
+                    # Store the reasoning for display in Gradio
+                    self.store_reasoning(token_symbol, reasoning, decision)
 
                     if decision == 'buy' and token_symbol not in self.current_positions:
                         await self.make_trade(symbol, 'buy')
@@ -209,8 +222,8 @@ class TradingBot:
     async def advanced_reasoning_decision(self, token_symbol):
         try:
             technical_data = await self.get_technical_data(f"{token_symbol}/USDT")
-            news_events = fetch_news_for_token(token_symbol)
-            social_sentiment = analyze_sentiment(token_symbol)
+            news_events = await self.fetch_news_for_token(token_symbol)
+            social_sentiment = await self.analyze_sentiment(token_symbol)
 
             # Craft prompt
             prompt = f"""
@@ -457,12 +470,78 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
                 body=f"An error occurred during trade execution: {e}"
             )
 
-    # Ensure fetch_news_for_token and analyze_sentiment are accessible
-    def fetch_news_for_token(self, token_symbol):
-        return fetch_news_for_token(token_symbol)
+    async def discover_new_tokens(self):
+        try:
+            async with aiohttp.ClientSession() as session:
+                url = "https://public-api.solscan.io/token/list"
+                params = {
+                    "sortBy": "createTime",
+                    "sortType": "desc",
+                    "limit": 50  # Adjust this number as needed
+                }
+                async with session.get(url, params=params) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        for token in data['data']:
+                            token_symbol = token.get('symbol', '')
+                            if token_symbol and token_symbol not in self.discovered_tokens:
+                                self.discovered_tokens.add(token_symbol)
+                                logging.info(f"Discovered new Solana token: {token_symbol}")
+                                
+                                # You might want to add additional checks here, such as:
+                                # - Minimum liquidity
+                                # - Presence in Raydium pools
+                                # - Token metadata verification
+                                
+                                # For now, we'll just log the discovery
+        except Exception as e:
+            logging.error(f"Error discovering new Solana tokens: {e}")
 
-    def analyze_sentiment(self, token_symbol):
-        return analyze_sentiment(token_symbol)
+    async def fetch_news_for_token(self, token_symbol):
+        try:
+            async with aiohttp.ClientSession() as session:
+                url = f"https://cryptopanic.com/api/v1/posts/?auth_token=YOUR_API_KEY&currencies={token_symbol}"
+                async with session.get(url) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        news = [item['title'] for item in data['results'][:5]]
+                        return "\n".join(news)
+            return "No recent news found."
+        except Exception as e:
+            logging.error(f"Error fetching news for {token_symbol}: {e}")
+            return "Error fetching news."
+
+    async def analyze_sentiment(self, token_symbol):
+        try:
+            async with aiohttp.ClientSession() as session:
+                url = f"https://api.lunarcrush.com/v2?data=assets&key=YOUR_API_KEY&symbol={token_symbol}"
+                async with session.get(url) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return data['data'][0]['average_sentiment']
+            return 0  # Neutral sentiment if unable to fetch
+        except Exception as e:
+            logging.error(f"Error analyzing sentiment for {token_symbol}: {e}")
+            return 0
+
+    def store_reasoning(self, token_symbol, reasoning, decision):
+        if not hasattr(self, 'reasoning_history'):
+            self.reasoning_history = []
+        
+        self.reasoning_history.append({
+            'timestamp': pd.Timestamp.now(),
+            'token': token_symbol,
+            'reasoning': reasoning,
+            'decision': decision
+        })
+        
+        # Keep only the latest 50 reasoning entries
+        self.reasoning_history = self.reasoning_history[-50:]
+
+    def get_reasoning_history(self):
+        if hasattr(self, 'reasoning_history'):
+            return self.reasoning_history
+        return []
 
 # Instantiate the bot
 bot = TradingBot()
