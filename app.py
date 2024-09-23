@@ -118,6 +118,15 @@ async def get_news_sentiment(token_symbol):
 async def update_initial_balance():
     return await get_balance()
 
+async def get_ai_reasoning():
+    reasoning_history = bot.get_reasoning_history()
+    if reasoning_history:
+        df = pd.DataFrame(reasoning_history)
+        df['timestamp'] = df['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
+        return df
+    else:
+        return pd.DataFrame(columns=['timestamp', 'token', 'reasoning', 'decision'])
+
 with gr.Blocks() as demo:
     gr.Markdown("# 🪙 Solana AI Trading Bot Dashboard 🪙")
     
@@ -176,6 +185,11 @@ with gr.Blocks() as demo:
         refresh_logs_button = gr.Button("🔄 Refresh Logs")
         refresh_logs_button.click(fn=get_logs, inputs=None, outputs=logs_text)
     
+    with gr.Tab("🧠 AI Reasoning"):
+        gr.Markdown("## 🤖 AI Decision Making Process")
+        reasoning_df = gr.DataFrame(value=get_ai_reasoning(), interactive=False)
+        refresh_reasoning_button = gr.Button("🔄 Refresh AI Reasoning")
+    
     # Auto-refresh status, positions, and balance every 10 seconds
     async def refresh_status_positions_balance():
         status = get_bot_status()
@@ -184,6 +198,19 @@ with gr.Blocks() as demo:
         return status, positions, balance
     
     demo.load(refresh_status_positions_balance, inputs=None, outputs=[status_text, positions_df, balance_text], every=10)
+
+    # Add this to the existing refresh function
+    async def refresh_status_positions_balance_reasoning():
+        status = get_bot_status()
+        positions = get_positions()
+        balance = await get_balance()
+        reasoning = await get_ai_reasoning()
+        return status, positions, balance, reasoning
+    
+    demo.load(refresh_status_positions_balance_reasoning, inputs=None, outputs=[status_text, positions_df, balance_text, reasoning_df], every=10)
+
+    # Update the refresh button click event
+    refresh_reasoning_button.click(get_ai_reasoning, inputs=None, outputs=reasoning_df)
 
     # Add this at the end of the gr.Blocks() context
     demo.load(update_initial_balance, inputs=None, outputs=balance_text)
