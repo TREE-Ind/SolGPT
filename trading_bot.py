@@ -425,4 +425,35 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
                     if profit > 0:
                         self.performance_metrics['wins'] += 1
                     else:
-                       
+                        self.performance_metrics['losses'] += 1
+                    logging.info(f"Sold {token_symbol} for a profit of {profit} USDT")
+                    if self.discord_alert:
+                        await self.discord_alert.send_message(f"🛒 Sold {token_symbol} for a profit of {profit} USDT")
+                    send_email(
+                        subject=f"Trading Bot Alert: SELL {token_symbol}",
+                        body=f"Sold {token_symbol} for a profit of {profit} USDT"
+                    )
+                    del self.current_positions[token_symbol]
+
+            # Add trade to recent trades
+            self.recent_trades.append(trade_entry)
+            # Keep only the latest 10 trades
+            self.recent_trades = self.recent_trades[-10:]
+        except Exception as e:
+            logging.error(f"Error in make_trade: {e}")
+            if self.discord_alert:
+                await self.discord_alert.send_message(f"❌ Error in make_trade: {e}")
+            send_email(
+                subject="Trading Bot Alert: Trade Execution Error",
+                body=f"An error occurred during trade execution: {e}"
+            )
+
+    # Ensure fetch_news_for_token and analyze_sentiment are accessible
+    def fetch_news_for_token(self, token_symbol):
+        return fetch_news_for_token(token_symbol)
+
+    def analyze_sentiment(self, token_symbol):
+        return analyze_sentiment(token_symbol)
+
+# Instantiate the bot
+bot = TradingBot()
