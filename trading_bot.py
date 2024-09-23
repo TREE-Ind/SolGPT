@@ -25,7 +25,6 @@ from spl.token.async_client import AsyncToken
 from spl.token.instructions import get_associated_token_address
 import struct
 import time
-import threading
 
 # Configure logging
 logging.basicConfig(
@@ -53,6 +52,8 @@ class TradingBot:
         self.token_selection_interval = 3600  # 1 hour
         self.token_mints = get_token_mints()
         self.pools = get_raydium_pools()
+        self.loop = asyncio.get_event_loop()
+        self.task = None
         self.recent_trades = []  # List to store recent trades
         self.performance_metrics = {'total_profit': 0, 'trades': 0, 'wins': 0, 'losses': 0}
         self.balance_check_interval = 300  # Check balance every 5 minutes
@@ -79,7 +80,7 @@ class TradingBot:
     async def start(self):
         if not self.running:
             self.running = True
-            self.task = asyncio.create_task(self.run())
+            self.task = self.loop.create_task(self.run())
             logging.info("Trading bot started.")
 
     async def stop(self):
@@ -131,17 +132,9 @@ class TradingBot:
                 )
                 await asyncio.sleep(60)  # Wait a minute before retrying
 
-    async def fetch_balance(self):
-        try:
-            sol_balance = await get_balance(self.solana_client, self.wallet.pubkey())
-            return sol_balance
-        except Exception as e:
-            logging.error(f"Error fetching balance: {e}")
-            return None
-
     async def check_balance(self):
         try:
-            sol_balance = await self.fetch_balance()
+            sol_balance = await get_balance(self.solana_client, self.wallet.pubkey())
             logging.info(f"Current SOL balance: {sol_balance}")
             if self.discord_alert:
                 await self.discord_alert.send_message(f"🔍 Current SOL balance: {sol_balance}")
@@ -432,43 +425,4 @@ Provide a detailed analysis of the potential price movement of {token_symbol} in
                     if profit > 0:
                         self.performance_metrics['wins'] += 1
                     else:
-                        self.performance_metrics['losses'] += 1
-                    logging.info(f"Sold {token_symbol} for a profit of {profit} USDT")
-                    if self.discord_alert:
-                        await self.discord_alert.send_message(f"🛒 Sold {token_symbol} for a profit of {profit} USDT")
-                    send_email(
-                        subject=f"Trading Bot Alert: SELL {token_symbol}",
-                        body=f"Sold {token_symbol} for a profit of {profit} USDT"
-                    )
-                    del self.current_positions[token_symbol]
-
-            # Add trade to recent trades
-            self.recent_trades.append(trade_entry)
-            # Keep only the latest 10 trades
-            self.recent_trades = self.recent_trades[-10:]
-        except Exception as e:
-            logging.error(f"Error in make_trade: {e}")
-            if self.discord_alert:
-                await self.discord_alert.send_message(f"❌ Error in make_trade: {e}")
-            send_email(
-                subject="Trading Bot Alert: Trade Execution Error",
-                body=f"An error occurred during trade execution: {e}"
-            )
-
-    # Ensure fetch_news_for_token and analyze_sentiment are accessible
-    def fetch_news_for_token(self, token_symbol):
-        return fetch_news_for_token(token_symbol)
-
-    def analyze_sentiment(self, token_symbol):
-        return analyze_sentiment(token_symbol)
-
-# Instantiate the bot
-bot = TradingBot()
-
-# Function to start the trading bot in a separate thread
-def start_trading_bot():
-    asyncio.run(bot.start())
-
-# Start the trading bot thread
-trading_bot_thread = threading.Thread(target=start_trading_bot, daemon=True)
-trading_bot_thread.start()
+                       
